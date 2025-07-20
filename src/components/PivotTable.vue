@@ -22,7 +22,7 @@
                 emit-value map-options />
             </div>
             <div class="col-md-3">
-              <q-select v-model="config.values" :options="numericFields" label="Valores" multiple use-chips emit-value
+              <q-select v-model="config.values" :options="availableFields" label="Valores" multiple use-chips emit-value
                 map-options>
                 <template v-slot:option="scope">
                   <q-item v-bind="scope.itemProps">
@@ -30,8 +30,9 @@
                       <q-item-label>{{ scope.opt.label }}</q-item-label>
                     </q-item-section>
                     <q-item-section side>
-                      <q-select v-model="valueAggregators[scope.opt.value]" :options="aggregatorOptions" dense
-                        borderless emit-value map-options @update:model-value="updatePivotData" />
+                      <q-select v-model="valueAggregators[scope.opt.value]"
+                        :options="getAggregatorsForField(scope.opt.value)" dense borderless emit-value map-options
+                        @update:model-value="generatePivotData" />
                     </q-item-section>
                   </q-item>
                 </template>
@@ -77,41 +78,60 @@ const config = ref({
   values: []
 })
 
-// Agregadores para los valores
-const valueAggregators = ref({})
-const aggregatorOptions = [
-  { label: 'Suma', value: 'sum' },
-  { label: 'Promedio', value: 'avg' },
-  { label: 'Conteo', value: 'count' },
-  { label: 'Mínimo', value: 'min' },
-  { label: 'Máximo', value: 'max' }
-]
+// Tipos de campos detectados automáticamente
+const fieldTypes = ref({})
 
-// Detectar campos disponibles
+// Agregadores disponibles
+const aggregatorOptions = {
+  numeric: [
+    { label: 'Suma', value: 'sum' },
+    { label: 'Promedio', value: 'avg' },
+    { label: 'Conteo', value: 'count' },
+    { label: 'Mínimo', value: 'min' },
+    { label: 'Máximo', value: 'max' }
+  ],
+  text: [
+    { label: 'Conteo', value: 'count' },
+    { label: 'Valores únicos', value: 'distinct' }
+  ]
+}
+
+const valueAggregators = ref({})
+
+// Detectar campos disponibles y sus tipos
 const availableFields = computed(() => {
   if (!props.data || props.data.length === 0) return []
-  const sampleItem = props.data[0]
-  return Object.keys(sampleItem).map(key => ({
-    label: key.replace(/_/g, ' ').toUpperCase(),
-    value: key
-  }))
-})
 
-// Detectar campos numéricos
-const numericFields = computed(() => {
-  if (!props.data || props.data.length === 0) return []
   const sampleItem = props.data[0]
-  return Object.keys(sampleItem).filter(key => {
+  const fields = []
+
+  Object.keys(sampleItem).forEach(key => {
     const value = sampleItem[key]
-    return typeof value === 'number' ||
-      (typeof value === 'string' && !isNaN(value) && value.trim() !== '')
-  }).map(key => ({
-    label: key.replace(/_/g, ' ').toUpperCase(),
-    value: key
-  }))
+    let type = 'text'
+
+    if (typeof value === 'number') {
+      type = 'numeric'
+    } else if (typeof value === 'string' && !isNaN(value) && value.trim() !== '') {
+      type = 'numeric'
+    }
+
+    fieldTypes.value[key] = type
+    fields.push({
+      label: key.replace(/_/g, ' ').toUpperCase(),
+      value: key,
+      type: type
+    })
+  })
+
+  return fields
 })
 
-// Datos pivote
+// Obtener agregadores disponibles para un campo
+function getAggregatorsForField(field) {
+  return aggregatorOptions[fieldTypes.value[field]] || aggregatorOptions.text
+}
+
+// Generar datos pivote
 const pivotRows = ref([])
 const pivotColumns = ref([])
 
@@ -140,24 +160,32 @@ function generatePivotData() {
         sum: {},
         min: {},
         max: {},
+        distinctValues: {},
         values: {}
       }
       config.value.values.forEach(valueField => {
         groupedData[rowKey][colKey].sum[valueField] = 0
         groupedData[rowKey][colKey].min[valueField] = Infinity
         groupedData[rowKey][colKey].max[valueField] = -Infinity
+        groupedData[rowKey][colKey].distinctValues[valueField] = new Set()
         groupedData[rowKey][colKey].values[valueField] = []
       })
     }
 
     config.value.values.forEach(valueField => {
-      const numValue = parseFloat(item[valueField]) || 0
+      const value = item[valueField]
       const group = groupedData[rowKey][colKey]
+
       group.count++
-      group.sum[valueField] += numValue
-      group.values[valueField].push(numValue)
-      group.min[valueField] = Math.min(group.min[valueField], numValue)
-      group.max[valueField] = Math.max(group.max[valueField], numValue)
+      group.values[valueField].push(value)
+      group.distinctValues[valueField].add(value)
+
+      if (fieldTypes.value[valueField] === 'numeric') {
+        const numValue = parseFloat(value) || 0
+        group.sum[valueField] += numValue
+        group.min[valueField] = Math.min(group.min[valueField], numValue)
+        group.max[valueField] = Math.max(group.max[valueField], numValue)
+      }
     })
   })
 
@@ -172,12 +200,21 @@ function generatePivotData() {
 
   Array.from(colKeys).forEach(colKey => {
     config.value.values.forEach(valueField => {
-      const aggregator = valueAggregators.value[valueField] || 'sum'
+      const aggregator = valueAggregators.value[valueField] || 'count'
+      const isNumeric = fieldTypes.value[valueField] === 'numeric'
+
+      let label = `${valueField.replace(/_/g, ' ').toUpperCase()}`
+      label += ` (${aggregator.toUpperCase()})`
+
+      if (config.value.columns.length > 0) {
+        label += ` - ${colKey}`
+      }
+
       columns.push({
         name: `${colKey}_${valueField}_${aggregator}`,
-        label: `${valueField.replace(/_/g, ' ').toUpperCase()} (${aggregator.toUpperCase()}) - ${colKey}`,
+        label: label,
         field: `${colKey}_${valueField}_${aggregator}`,
-        align: 'right',
+        align: isNumeric ? 'right' : 'left',
         sortable: true
       })
     })
@@ -197,20 +234,33 @@ function generatePivotData() {
     Array.from(colKeys).forEach(colKey => {
       if (groupedData[rowKey]?.[colKey]) {
         config.value.values.forEach(valueField => {
-          const aggregator = valueAggregators.value[valueField] || 'sum'
+          const aggregator = valueAggregators.value[valueField] || 'count'
           const group = groupedData[rowKey][colKey]
-          let value = 0
+          let value = ''
 
           switch (aggregator) {
-            case 'sum': value = group.sum[valueField]; break
-            case 'avg': value = group.sum[valueField] / group.count; break
-            case 'count': value = group.count; break
-            case 'min': value = group.min[valueField]; break
-            case 'max': value = group.max[valueField]; break
+            case 'sum':
+              value = group.sum[valueField]
+              break
+            case 'avg':
+              value = group.sum[valueField] / group.count
+              break
+            case 'count':
+              value = group.count
+              break
+            case 'min':
+              value = group.min[valueField]
+              break
+            case 'max':
+              value = group.max[valueField]
+              break
+            case 'distinct':
+              value = group.distinctValues[valueField].size
+              break
           }
 
           rowData[`${colKey}_${valueField}_${aggregator}`] =
-            aggregator === 'avg' ? value.toFixed(2) : value
+            (aggregator === 'avg' && typeof value === 'number') ? value.toFixed(2) : value
         })
       }
     })
@@ -226,8 +276,9 @@ watch(valueAggregators, generatePivotData, { deep: true })
 
 // Inicialización
 onMounted(() => {
-  numericFields.value.forEach(field => {
-    valueAggregators.value[field.value] = 'sum'
+  // Inicializar agregadores por defecto
+  availableFields.value.forEach(field => {
+    valueAggregators.value[field.value] = field.type === 'numeric' ? 'sum' : 'count'
   })
   generatePivotData()
 })
