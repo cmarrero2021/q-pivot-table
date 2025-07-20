@@ -61,6 +61,24 @@
             </div>
           </div>
         </q-card-section>
+
+        <!-- Sección de exportación -->
+        <q-card-actions align="right">
+          <q-btn-group flat>
+            <q-btn color="positive" @click="exportToXLSX" :loading="exporting === 'xlsx'">
+              <svg-icon type="mdi" :path="mdiMicrosoftExcel" class="export-icon"></svg-icon>
+              <q-tooltip>Exportar a Excel (XLSX)</q-tooltip>
+            </q-btn>
+            <q-btn color="primary" @click="exportToJSON" :loading="exporting === 'json'">
+              <svg-icon type="mdi" :path="mdiCodeJson" class="export-icon"></svg-icon>
+              <q-tooltip>Exportar a JSON</q-tooltip>
+            </q-btn>
+            <q-btn color="secondary" @click="exportToCSV" :loading="exporting === 'csv'">
+              <svg-icon type="mdi" :path="mdiFileDelimited" class="export-icon"></svg-icon>
+              <q-tooltip>Exportar a CSV</q-tooltip>
+            </q-btn>
+          </q-btn-group>
+        </q-card-actions>
       </q-card>
     </div>
 
@@ -79,6 +97,15 @@
 
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
+import { useQuasar } from 'quasar'
+import { exportFile } from 'quasar'
+import SvgIcon from '@jamescoyle/vue-icon'
+import {
+  mdiMicrosoftExcel,
+  mdiCodeJson,
+  mdiFileDelimited
+} from '@mdi/js'
+const $q = useQuasar()
 
 const props = defineProps({
   data: {
@@ -121,6 +148,9 @@ const aggregatorOptions = {
 }
 
 const valueAggregators = ref({})
+
+// Estado de exportación
+const exporting = ref(null)
 
 // Detectar campos disponibles y sus tipos
 const availableFields = computed(() => {
@@ -317,6 +347,201 @@ function generatePivotData() {
   })
 }
 
+// Función para exportar a XLSX usando ExcelJS (solución segura)
+/*
+async function exportToXLSX() {
+  exporting.value = 'xlsx'
+  $q.notify({
+    message: 'Preparando archivo Excel...',
+    color: 'info',
+    icon: 'mdi-progress-clock',
+    timeout: 1000
+  })
+
+  try {
+    const ExcelJS = await import('exceljs')
+    const workbook = new ExcelJS.Workbook()
+    const worksheet = workbook.addWorksheet('DatosPivote')
+
+    // Agregar encabezados
+    worksheet.addRow(pivotColumns.value.map(col => col.label))
+
+    // Agregar datos
+    pivotRows.value.forEach(row => {
+      worksheet.addRow(pivotColumns.value.map(col => row[col.field]))
+    })
+
+    // Generar archivo
+    const buffer = await workbook.xlsx.writeBuffer()
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = URL.createObjectURL(blob)
+
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `pivot_table_${new Date().toISOString().slice(0, 10)}.xlsx`
+    link.click()
+
+    // Limpiar objeto URL
+    setTimeout(() => URL.revokeObjectURL(url), 100)
+
+    $q.notify({
+      message: 'Archivo Excel exportado con éxito',
+      color: 'positive',
+      icon: 'mdi-check-circle',
+      timeout: 3000
+    })
+  } catch (error) {
+    $q.notify({
+      message: 'Error al exportar a Excel: ' + error.message,
+      color: 'negative',
+      icon: 'mdi-alert-circle',
+      timeout: 5000
+    })
+    console.error('Error exporting to XLSX:', error)
+  } finally {
+    exporting.value = null
+  }
+}
+*/
+async function exportToXLSX() {
+  exporting.value = 'xlsx'
+  showNotification('Preparando archivo Excel...', 'info', 'mdi-progress-clock')
+
+  try {
+    const ExcelJS = await import('exceljs')
+    const workbook = new ExcelJS.Workbook()
+    const worksheet = workbook.addWorksheet('DatosPivote')
+
+    // Agregar encabezados
+    worksheet.addRow(pivotColumns.value.map(col => col.label))
+
+    // Agregar datos
+    pivotRows.value.forEach(row => {
+      worksheet.addRow(pivotColumns.value.map(col => row[col.field]))
+    })
+
+    // Generar archivo
+    const buffer = await workbook.xlsx.writeBuffer()
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = URL.createObjectURL(blob)
+
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `pivot_table_${new Date().toISOString().slice(0, 10)}.xlsx`
+    link.click()
+
+    // Limpiar objeto URL
+    setTimeout(() => URL.revokeObjectURL(url), 100)
+
+    showNotification('Archivo Excel exportado con éxito', 'positive', 'mdi-check-circle')
+  } catch (error) {
+    showNotification('Error al exportar a Excel: ' + error.message, 'negative', 'mdi-alert-circle')
+    console.error('Error exporting to XLSX:', error)
+  } finally {
+    exporting.value = null
+  }
+}
+
+// Función helper para notificaciones
+function showNotification(message, color, icon) {
+  $q.notify({
+    message,
+    color,
+    icon,
+    timeout: color === 'negative' ? 5000 : 3000
+  })
+}
+// Función para exportar a JSON
+function exportToJSON() {
+  exporting.value = 'json'
+  $q.notify({
+    message: 'Preparando archivo JSON...',
+    color: 'info',
+    icon: 'mdi-progress-clock',
+    timeout: 1000
+  })
+
+  try {
+    const data = {
+      columns: pivotColumns.value,
+      rows: pivotRows.value,
+      config: config.value,
+      exportedAt: new Date().toISOString()
+    }
+
+    const jsonStr = JSON.stringify(data, null, 2)
+    const date = new Date().toISOString().slice(0, 10)
+
+    exportFile(`pivot_table_${date}.json`, jsonStr, 'application/json')
+
+    $q.notify({
+      message: 'Archivo JSON exportado con éxito',
+      color: 'positive',
+      icon: 'mdi-check-circle',
+      timeout: 3000
+    })
+  } catch (error) {
+    $q.notify({
+      message: 'Error al exportar a JSON: ' + error.message,
+      color: 'negative',
+      icon: 'mdi-alert-circle',
+      timeout: 5000
+    })
+    console.error('Error exporting to JSON:', error)
+  } finally {
+    exporting.value = null
+  }
+}
+
+// Función para exportar a CSV
+function exportToCSV() {
+  exporting.value = 'csv'
+  $q.notify({
+    message: 'Preparando archivo CSV...',
+    color: 'info',
+    icon: 'mdi-progress-clock',
+    timeout: 1000
+  })
+
+  try {
+    const header = pivotColumns.value.map(col => col.label).join(',')
+    const rows = pivotRows.value.map(row => {
+      return pivotColumns.value.map(col => {
+        // Escapar comas y comillas en los valores
+        let value = row[col.field] ?? ''
+        if (typeof value === 'string') {
+          if (value.includes(',') || value.includes('"')) {
+            value = `"${value.replace(/"/g, '""')}"`
+          }
+        }
+        return value
+      }).join(',')
+    }).join('\n')
+
+    const csvContent = `${header}\n${rows}`
+    const date = new Date().toISOString().slice(0, 10)
+
+    exportFile(`pivot_table_${date}.csv`, csvContent, 'text/csv')
+
+    $q.notify({
+      message: 'Archivo CSV exportado con éxito',
+      color: 'positive',
+      icon: 'mdi-check-circle',
+      timeout: 3000
+    })
+  } catch (error) {
+    $q.notify({
+      message: 'Error al exportar a CSV: ' + error.message,
+      color: 'negative',
+      icon: 'mdi-alert-circle',
+      timeout: 5000
+    })
+    console.error('Error exporting to CSV:', error)
+  } finally {
+    exporting.value = null
+  }
+}
+
 // Watchers
 watch(() => props.data, generatePivotData, { deep: true })
 watch(() => config.value, generatePivotData, { deep: true })
@@ -347,5 +572,9 @@ defineExpose({ generatePivotData })
 
 .pivot-table-display {
   overflow-x: auto;
+}
+
+.q-btn-group {
+  margin-top: 10px;
 }
 </style>

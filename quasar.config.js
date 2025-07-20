@@ -78,6 +78,8 @@ export default defineConfig((/* ctx */) => {
 
     // https://v2.quasar.dev/quasar-cli-vite/quasar-config-file#framework
     framework: {
+      iconSet: 'mdi-v6', // Usar Material Design Icons v6
+      extras: ['mdi-v6'], // Habilitar los íconos MDI
       config: {},
 
       // iconSet: 'material-icons', // Quasar icon set
@@ -91,7 +93,8 @@ export default defineConfig((/* ctx */) => {
       // directives: [],
 
       // Quasar plugins
-      plugins: [],
+      // plugins: [],
+      plugins: ['Notify'], // Esto es esencial
     },
 
     // animations: 'all', // --- includes all animations

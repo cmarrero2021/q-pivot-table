@@ -15,8 +15,12 @@
     "postinstall": "quasar prepare"
   },
   "dependencies": {
+    "@jamescoyle/vue-icon": "^0.1.2",
+    "@mdi/js": "^7.4.47",
     "@quasar/extras": "^1.17.0",
+    "@quasar/quasar-ui-qmarkdown": "^2.0.5",
     "axios": "^1.2.1",
+    "exceljs": "^4.4.0",
     "pinia": "^3.0.1",
     "quasar": "^2.16.0",
     "vue": "^3.4.18",
