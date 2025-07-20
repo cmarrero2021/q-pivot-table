@@ -39,6 +39,27 @@
               </q-select>
             </div>
           </div>
+
+          <!-- Sección de controles de filtro activos -->
+          <div class="row q-col-gutter-sm q-mt-md" v-if="config.filters.length > 0">
+            <div class="col-12">
+              <q-card flat bordered>
+                <q-card-section>
+                  <div class="text-subtitle2">Filtros Activos</div>
+                </q-card-section>
+                <q-card-section>
+                  <div class="row q-col-gutter-md">
+                    <div class="col-md-4" v-for="filterField in config.filters" :key="filterField">
+                      <q-select v-model="activeFilters[filterField]"
+                        :options="getUniqueValues(filterField).map(v => ({ label: v || '(Vacío)', value: v }))"
+                        :label="filterField.replace(/_/g, ' ').toUpperCase()" multiple use-chips emit-value map-options
+                        dense filled @update:model-value="generatePivotData" />
+                    </div>
+                  </div>
+                </q-card-section>
+              </q-card>
+            </div>
+          </div>
         </q-card-section>
       </q-card>
     </div>
@@ -77,6 +98,9 @@ const config = ref({
   filters: [],
   values: []
 })
+
+// Valores seleccionados para cada filtro
+const activeFilters = ref({})
 
 // Tipos de campos detectados automáticamente
 const fieldTypes = ref({})
@@ -126,6 +150,18 @@ const availableFields = computed(() => {
   return fields
 })
 
+// Obtener valores únicos para un campo (para mostrar opciones de filtro)
+function getUniqueValues(field) {
+  if (!props.data || props.data.length === 0) return []
+  const unique = new Set()
+  props.data.forEach(item => {
+    if (item[field] !== null && item[field] !== undefined) {
+      unique.add(item[field])
+    }
+  })
+  return Array.from(unique).sort()
+}
+
 // Obtener agregadores disponibles para un campo
 function getAggregatorsForField(field) {
   return aggregatorOptions[fieldTypes.value[field]] || aggregatorOptions.text
@@ -142,7 +178,19 @@ function generatePivotData() {
     return
   }
 
-  let filteredData = [...props.data]
+  // 1. Aplicar filtros
+  let filteredData = props.data.filter(item => {
+    return config.value.filters.every(filterField => {
+      // Si no hay filtros seleccionados para este campo, incluir todos los items
+      if (!activeFilters.value[filterField] || activeFilters.value[filterField].length === 0) {
+        return true
+      }
+      // Verificar si el valor del item está en los filtros seleccionados
+      return activeFilters.value[filterField].includes(item[filterField])
+    })
+  })
+
+  // 2. Agrupar datos por filas y columnas
   const groupedData = {}
   const rowKeys = new Set()
   const colKeys = new Set()
@@ -189,7 +237,7 @@ function generatePivotData() {
     })
   })
 
-  // Preparar columnas
+  // 3. Preparar columnas para la tabla
   const columns = config.value.rows.map(field => ({
     name: field,
     label: field.replace(/_/g, ' ').toUpperCase(),
@@ -222,7 +270,7 @@ function generatePivotData() {
 
   pivotColumns.value = columns
 
-  // Preparar filas
+  // 4. Preparar filas para la tabla
   pivotRows.value = Array.from(rowKeys).map(rowKey => {
     const rowParts = rowKey.split('|')
     const rowData = {}
