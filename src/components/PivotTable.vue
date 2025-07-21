@@ -25,24 +25,6 @@
               <q-select v-model="config.filters" :options="availableFields" label="Filtros" multiple use-chips
                 emit-value map-options />
             </div>
-
-            <!-- <div class="col-md-3">
-              <q-select v-model="config.values" :options="availableFields" label="Valores" multiple use-chips emit-value
-                map-options>
-                <template v-slot:option="scope">
-                  <q-item v-bind="scope.itemProps">
-                    <q-item-section>
-                      <q-item-label>{{ scope.opt.label }}</q-item-label>
-                    </q-item-section>
-                    <q-item-section side>
-                      <q-select v-model="valueAggregators[scope.opt.value]"
-                        :options="getAggregatorsForField(scope.opt.value)" dense borderless emit-value map-options
-                        @update:model-value="generatePivotData" />
-                    </q-item-section>
-                  </q-item>
-                </template>
-</q-select>
-</div> -->
             <div class="col-md-3">
               <q-select v-model="config.values" :options="availableFields" label="Valores" multiple use-chips emit-value
                 map-options>
@@ -114,7 +96,8 @@
         </q-card-actions>
       </q-card>
     </div>
-    <!-- GARGAR CONSULTAS  -->
+
+    <!-- Diálogo para cargar consultas -->
     <q-dialog v-model="showLoadDialog" persistent>
       <q-card style="min-width: 70vw">
         <q-card-section>
@@ -174,16 +157,6 @@
 
           <q-select v-model="newQueryTags" label="Etiquetas" multiple use-chips input-debounce="0" use-input
             @new-value="addTag" />
-          <!--
-          <q-card flat bordered class="q-mt-md">
-            <q-card-section>
-              <div class="text-subtitle2">Configuración actual</div>
-            </q-card-section>
-            <q-card-section>
-              <pre>{{ currentConfigPreview }}</pre>
-            </q-card-section>
-          </q-card>
-           -->
         </q-card-section>
 
         <q-card-actions align="right">
@@ -192,7 +165,6 @@
         </q-card-actions>
       </q-card>
     </q-dialog>
-    <!-- GARGAR CONSULTAS  -->
 
     <!-- Tabla pivote resultante -->
     <div class="pivot-table-display q-pa-md">
@@ -212,155 +184,19 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useQuasar } from 'quasar'
 import { exportFile } from 'quasar'
 import SvgIcon from '@jamescoyle/vue-icon'
-import {
-  mdiMicrosoftExcel,
-  mdiCodeJson,
-  mdiFileDelimited
-} from '@mdi/js'
-//////////////
+import { mdiMicrosoftExcel, mdiCodeJson, mdiFileDelimited } from '@mdi/js'
 import { usePivotStorage } from 'src/services/pivotStorage'
 import { format } from 'date-fns'
+
 const $q = useQuasar()
 const pivotStorage = usePivotStorage()
+
 // Estado para los diálogos
 const showLoadDialog = ref(false)
 const showSaveDialog = ref(false)
 const searchQuery = ref('')
 const newQueryName = ref('')
 const newQueryTags = ref([])
-
-// Obtener consultas filtradas
-const filteredQueries = computed(() => {
-  const queries = pivotStorage.getQueries()
-  if (!searchQuery.value) return queries
-
-  const search = searchQuery.value.toLowerCase()
-  return queries.filter(q =>
-    q.name.toLowerCase().includes(search) ||
-    q.tags.some(tag => tag.toLowerCase().includes(search))
-  )
-})
-
-// Vista previa de la configuración actual
-const currentConfigPreview = computed(() => {
-  return {
-    rows: config.value.rows,
-    columns: config.value.columns,
-    filters: config.value.filters,
-    values: config.value.values.map(field => ({
-      field,
-      aggregation: valueAggregators.value[field],
-      type: fieldTypes.value[field]
-    })),
-    activeFilters: activeFilters.value
-  }
-})
-
-// Verificar si se puede guardar la consulta
-const canSaveQuery = computed(() => {
-  return config.value.values.length > 0
-})
-
-// Formatear fecha para mostrar
-function formatDate(dateStr) {
-  return format(new Date(dateStr), 'dd/MM/yyyy HH:mm')
-}
-
-// Cargar una consulta guardada
-function loadQuery(query) {
-  config.value.rows = [...query.config.rows]
-  config.value.columns = [...query.config.columns]
-  config.value.filters = [...query.config.filters]
-  config.value.values = [...query.config.values.map(v => v.field)]
-
-  // Restaurar agregadores
-  query.config.values.forEach(v => {
-    valueAggregators.value[v.field] = v.aggregation
-  })
-
-  // Restaurar filtros activos si existen
-  if (query.config.activeFilters) {
-    activeFilters.value = { ...query.config.activeFilters }
-  }
-
-  pivotStorage.updateQueryUsage(query.id)
-  showLoadDialog.value = false
-  generatePivotData()
-
-  $q.notify({
-    message: `Consulta "${query.name}" cargada`,
-    color: 'positive',
-    icon: 'mdi-check-circle'
-  })
-}
-
-// Confirmar eliminación de consulta
-function confirmDeleteQuery(query) {
-  $q.dialog({
-    title: 'Confirmar eliminación',
-    message: `¿Estás seguro de eliminar la consulta "${query.name}"?`,
-    cancel: true,
-    persistent: true
-  }).onOk(() => {
-    pivotStorage.deleteQuery(query.id)
-    $q.notify({
-      message: `Consulta "${query.name}" eliminada`,
-      color: 'positive',
-      icon: 'mdi-check-circle'
-    })
-  })
-}
-
-// Guardar la consulta actual
-function saveCurrentQuery() {
-  const success = pivotStorage.saveQuery(
-    newQueryName.value,
-    currentConfigPreview.value,
-    newQueryTags.value
-  )
-
-  if (success) {
-    showSaveDialog.value = false
-    newQueryName.value = ''
-    newQueryTags.value = []
-
-    $q.notify({
-      message: 'Consulta guardada correctamente',
-      color: 'positive',
-      icon: 'mdi-check-circle'
-    })
-  }
-}
-
-// Añadir nueva etiqueta
-function addTag(val, done) {
-  if (val.length > 0) {
-    if (!newQueryTags.value.includes(val)) {
-      newQueryTags.value.push(val)
-    }
-    done(val, 'add')
-  } else {
-    done()
-  }
-}
-
-// Limpiar consultas antiguas al montar el componente
-onMounted(() => {
-  pivotStorage.cleanOldQueries()
-})
-
-//////////////
-
-const props = defineProps({
-  data: {
-    type: Array,
-    required: true
-  },
-  loading: {
-    type: Boolean,
-    default: false
-  }
-})
 
 // Configuración inicial
 const config = ref({
@@ -390,15 +226,32 @@ const aggregatorOptions = {
     { label: 'Valores únicos', value: 'distinct' }
   ]
 }
-function getAggregatorLabel(field, aggregatorValue) {
-  const aggregators = getAggregatorsForField(field)
-  const found = aggregators.find(agg => agg.value === aggregatorValue)
-  return found ? found.label : aggregatorValue
-}
+
 const valueAggregators = ref({})
 
 // Estado de exportación
 const exporting = ref(null)
+
+// Props del componente
+const props = defineProps({
+  data: {
+    type: Array,
+    required: true
+  },
+  loading: {
+    type: Boolean,
+    default: false
+  }
+})
+
+// Inicializar agregadores
+function initializeAggregators() {
+  availableFields.value.forEach(field => {
+    if (!valueAggregators.value[field.value]) {
+      valueAggregators.value[field.value] = field.type === 'numeric' ? 'sum' : 'count'
+    }
+  })
+}
 
 // Detectar campos disponibles y sus tipos
 const availableFields = computed(() => {
@@ -428,7 +281,7 @@ const availableFields = computed(() => {
   return fields
 })
 
-// Obtener valores únicos para un campo (para mostrar opciones de filtro)
+// Obtener valores únicos para un campo
 function getUniqueValues(field) {
   if (!props.data || props.data.length === 0) return []
   const unique = new Set()
@@ -445,6 +298,13 @@ function getAggregatorsForField(field) {
   return aggregatorOptions[fieldTypes.value[field]] || aggregatorOptions.text
 }
 
+// Obtener la etiqueta del agregador
+function getAggregatorLabel(field, aggregatorValue) {
+  const aggregators = getAggregatorsForField(field)
+  const found = aggregators.find(agg => agg.value === aggregatorValue)
+  return found ? found.label : aggregatorValue
+}
+
 // Generar datos pivote
 const pivotRows = ref([])
 const pivotColumns = ref([])
@@ -459,16 +319,14 @@ function generatePivotData() {
   // 1. Aplicar filtros
   let filteredData = props.data.filter(item => {
     return config.value.filters.every(filterField => {
-      // Si no hay filtros seleccionados para este campo, incluir todos los items
       if (!activeFilters.value[filterField] || activeFilters.value[filterField].length === 0) {
         return true
       }
-      // Verificar si el valor del item está en los filtros seleccionados
       return activeFilters.value[filterField].includes(item[filterField])
     })
   })
 
-  // 2. Agrupar datos por filas y columnas
+  // 2. Agrupar datos
   const groupedData = {}
   const rowKeys = new Set()
   const colKeys = new Set()
@@ -515,7 +373,7 @@ function generatePivotData() {
     })
   })
 
-  // 3. Preparar columnas para la tabla
+  // 3. Preparar columnas
   const columns = config.value.rows.map(field => ({
     name: field,
     label: field.replace(/_/g, ' ').toUpperCase(),
@@ -530,7 +388,7 @@ function generatePivotData() {
       const isNumeric = fieldTypes.value[valueField] === 'numeric'
 
       let label = `${valueField.replace(/_/g, ' ').toUpperCase()}`
-      label += ` (${aggregator.toUpperCase()})`
+      label += ` (${getAggregatorLabel(valueField, aggregator)})`
 
       if (config.value.columns.length > 0) {
         label += ` - ${colKey}`
@@ -548,7 +406,7 @@ function generatePivotData() {
 
   pivotColumns.value = columns
 
-  // 4. Preparar filas para la tabla
+  // 4. Preparar filas
   pivotRows.value = Array.from(rowKeys).map(rowKey => {
     const rowParts = rowKey.split('|')
     const rowData = {}
@@ -595,62 +453,7 @@ function generatePivotData() {
   })
 }
 
-// Función para exportar a XLSX usando ExcelJS (solución segura)
-/*
-async function exportToXLSX() {
-  exporting.value = 'xlsx'
-  $q.notify({
-    message: 'Preparando archivo Excel...',
-    color: 'info',
-    icon: 'mdi-progress-clock',
-    timeout: 1000
-  })
-
-  try {
-    const ExcelJS = await import('exceljs')
-    const workbook = new ExcelJS.Workbook()
-    const worksheet = workbook.addWorksheet('DatosPivote')
-
-    // Agregar encabezados
-    worksheet.addRow(pivotColumns.value.map(col => col.label))
-
-    // Agregar datos
-    pivotRows.value.forEach(row => {
-      worksheet.addRow(pivotColumns.value.map(col => row[col.field]))
-    })
-
-    // Generar archivo
-    const buffer = await workbook.xlsx.writeBuffer()
-    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-    const url = URL.createObjectURL(blob)
-
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `pivot_table_${new Date().toISOString().slice(0, 10)}.xlsx`
-    link.click()
-
-    // Limpiar objeto URL
-    setTimeout(() => URL.revokeObjectURL(url), 100)
-
-    $q.notify({
-      message: 'Archivo Excel exportado con éxito',
-      color: 'positive',
-      icon: 'mdi-check-circle',
-      timeout: 3000
-    })
-  } catch (error) {
-    $q.notify({
-      message: 'Error al exportar a Excel: ' + error.message,
-      color: 'negative',
-      icon: 'mdi-alert-circle',
-      timeout: 5000
-    })
-    console.error('Error exporting to XLSX:', error)
-  } finally {
-    exporting.value = null
-  }
-}
-*/
+// Funciones de exportación
 async function exportToXLSX() {
   exporting.value = 'xlsx'
   showNotification('Preparando archivo Excel...', 'info', 'mdi-progress-clock')
@@ -660,15 +463,11 @@ async function exportToXLSX() {
     const workbook = new ExcelJS.Workbook()
     const worksheet = workbook.addWorksheet('DatosPivote')
 
-    // Agregar encabezados
     worksheet.addRow(pivotColumns.value.map(col => col.label))
-
-    // Agregar datos
     pivotRows.value.forEach(row => {
       worksheet.addRow(pivotColumns.value.map(col => row[col.field]))
     })
 
-    // Generar archivo
     const buffer = await workbook.xlsx.writeBuffer()
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
     const url = URL.createObjectURL(blob)
@@ -678,7 +477,6 @@ async function exportToXLSX() {
     link.download = `pivot_table_${new Date().toISOString().slice(0, 10)}.xlsx`
     link.click()
 
-    // Limpiar objeto URL
     setTimeout(() => URL.revokeObjectURL(url), 100)
 
     showNotification('Archivo Excel exportado con éxito', 'positive', 'mdi-check-circle')
@@ -690,24 +488,9 @@ async function exportToXLSX() {
   }
 }
 
-// Función helper para notificaciones
-function showNotification(message, color, icon) {
-  $q.notify({
-    message,
-    color,
-    icon,
-    timeout: color === 'negative' ? 5000 : 3000
-  })
-}
-// Función para exportar a JSON
 function exportToJSON() {
   exporting.value = 'json'
-  $q.notify({
-    message: 'Preparando archivo JSON...',
-    color: 'info',
-    icon: 'mdi-progress-clock',
-    timeout: 1000
-  })
+  showNotification('Preparando archivo JSON...', 'info', 'mdi-progress-clock')
 
   try {
     const data = {
@@ -722,40 +505,23 @@ function exportToJSON() {
 
     exportFile(`pivot_table_${date}.json`, jsonStr, 'application/json')
 
-    $q.notify({
-      message: 'Archivo JSON exportado con éxito',
-      color: 'positive',
-      icon: 'mdi-check-circle',
-      timeout: 3000
-    })
+    showNotification('Archivo JSON exportado con éxito', 'positive', 'mdi-check-circle')
   } catch (error) {
-    $q.notify({
-      message: 'Error al exportar a JSON: ' + error.message,
-      color: 'negative',
-      icon: 'mdi-alert-circle',
-      timeout: 5000
-    })
+    showNotification('Error al exportar a JSON: ' + error.message, 'negative', 'mdi-alert-circle')
     console.error('Error exporting to JSON:', error)
   } finally {
     exporting.value = null
   }
 }
 
-// Función para exportar a CSV
 function exportToCSV() {
   exporting.value = 'csv'
-  $q.notify({
-    message: 'Preparando archivo CSV...',
-    color: 'info',
-    icon: 'mdi-progress-clock',
-    timeout: 1000
-  })
+  showNotification('Preparando archivo CSV...', 'info', 'mdi-progress-clock')
 
   try {
     const header = pivotColumns.value.map(col => col.label).join(',')
     const rows = pivotRows.value.map(row => {
       return pivotColumns.value.map(col => {
-        // Escapar comas y comillas en los valores
         let value = row[col.field] ?? ''
         if (typeof value === 'string') {
           if (value.includes(',') || value.includes('"')) {
@@ -771,36 +537,130 @@ function exportToCSV() {
 
     exportFile(`pivot_table_${date}.csv`, csvContent, 'text/csv')
 
-    $q.notify({
-      message: 'Archivo CSV exportado con éxito',
-      color: 'positive',
-      icon: 'mdi-check-circle',
-      timeout: 3000
-    })
+    showNotification('Archivo CSV exportado con éxito', 'positive', 'mdi-check-circle')
   } catch (error) {
-    $q.notify({
-      message: 'Error al exportar a CSV: ' + error.message,
-      color: 'negative',
-      icon: 'mdi-alert-circle',
-      timeout: 5000
-    })
+    showNotification('Error al exportar a CSV: ' + error.message, 'negative', 'mdi-alert-circle')
     console.error('Error exporting to CSV:', error)
   } finally {
     exporting.value = null
   }
 }
 
+// Funciones para manejar consultas guardadas
+const filteredQueries = computed(() => {
+  const queries = pivotStorage.getQueries()
+  if (!searchQuery.value) return queries
+
+  const search = searchQuery.value.toLowerCase()
+  return queries.filter(q =>
+    q.name.toLowerCase().includes(search) ||
+    q.tags.some(tag => tag.toLowerCase().includes(search))
+  )
+})
+
+const currentConfigPreview = computed(() => {
+  return {
+    rows: config.value.rows,
+    columns: config.value.columns,
+    filters: config.value.filters,
+    values: config.value.values.map(field => ({
+      field,
+      aggregation: valueAggregators.value[field],
+      type: fieldTypes.value[field]
+    })),
+    activeFilters: activeFilters.value
+  }
+})
+
+const canSaveQuery = computed(() => {
+  return config.value.values.length > 0
+})
+
+function formatDate(dateStr) {
+  return format(new Date(dateStr), 'dd/MM/yyyy HH:mm')
+}
+
+function loadQuery(query) {
+  config.value.rows = [...query.config.rows]
+  config.value.columns = [...query.config.columns]
+  config.value.filters = [...query.config.filters]
+  config.value.values = [...query.config.values.map(v => v.field)]
+
+  query.config.values.forEach(v => {
+    valueAggregators.value[v.field] = v.aggregation
+  })
+
+  if (query.config.activeFilters) {
+    activeFilters.value = { ...query.config.activeFilters }
+  }
+
+  pivotStorage.updateQueryUsage(query.id)
+  showLoadDialog.value = false
+  generatePivotData()
+
+  showNotification(`Consulta "${query.name}" cargada`, 'positive', 'mdi-check-circle')
+}
+
+function confirmDeleteQuery(query) {
+  $q.dialog({
+    title: 'Confirmar eliminación',
+    message: `¿Estás seguro de eliminar la consulta "${query.name}"?`,
+    cancel: true,
+    persistent: true
+  }).onOk(() => {
+    pivotStorage.deleteQuery(query.id)
+    showNotification(`Consulta "${query.name}" eliminada`, 'positive', 'mdi-check-circle')
+  })
+}
+
+function saveCurrentQuery() {
+  const success = pivotStorage.saveQuery(
+    newQueryName.value,
+    currentConfigPreview.value,
+    newQueryTags.value
+  )
+
+  if (success) {
+    showSaveDialog.value = false
+    newQueryName.value = ''
+    newQueryTags.value = []
+
+    showNotification('Consulta guardada correctamente', 'positive', 'mdi-check-circle')
+  }
+}
+
+function addTag(val, done) {
+  if (val.length > 0) {
+    if (!newQueryTags.value.includes(val)) {
+      newQueryTags.value.push(val)
+    }
+    done(val, 'add')
+  } else {
+    done()
+  }
+}
+
+function showNotification(message, color, icon) {
+  $q.notify({
+    message,
+    color,
+    icon,
+    timeout: color === 'negative' ? 5000 : 3000
+  })
+}
+
 // Watchers
 watch(() => props.data, generatePivotData, { deep: true })
 watch(() => config.value, generatePivotData, { deep: true })
 watch(valueAggregators, generatePivotData, { deep: true })
+watch(availableFields, () => {
+  initializeAggregators()
+  generatePivotData()
+}, { immediate: true })
 
 // Inicialización
 onMounted(() => {
-  // Inicializar agregadores por defecto
-  availableFields.value.forEach(field => {
-    valueAggregators.value[field.value] = field.type === 'numeric' ? 'sum' : 'count'
-  })
+  pivotStorage.cleanOldQueries()
   generatePivotData()
 })
 
@@ -824,11 +684,6 @@ defineExpose({ generatePivotData })
 
 .q-btn-group {
   margin-top: 10px;
-}
-
-.q-select .value-chip {
-  display: flex;
-  align-items: center;
 }
 
 .value-chip {
