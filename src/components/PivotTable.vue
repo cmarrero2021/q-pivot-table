@@ -5,6 +5,10 @@
       <q-card class="q-mb-md">
         <q-card-section>
           <div class="text-h6">Configuración de Tabla Pivote</div>
+          <q-btn-group flat>
+            <q-btn color="primary" label="Cargar consulta" @click="showLoadDialog = true" />
+            <q-btn color="secondary" label="Guardar como..." @click="showSaveDialog = true" :disable="!canSaveQuery" />
+          </q-btn-group>
         </q-card-section>
 
         <q-card-section>
@@ -81,6 +85,85 @@
         </q-card-actions>
       </q-card>
     </div>
+    <!-- GARGAR CONSULTAS  -->
+    <q-dialog v-model="showLoadDialog" persistent>
+      <q-card style="min-width: 70vw">
+        <q-card-section>
+          <div class="text-h6">Cargar consulta guardada</div>
+        </q-card-section>
+
+        <q-card-section>
+          <q-input v-model="searchQuery" label="Buscar consultas" clearable>
+            <template v-slot:append>
+              <q-icon name="search" />
+            </template>
+          </q-input>
+        </q-card-section>
+
+        <q-card-section class="q-pt-none">
+          <q-list bordered separator>
+            <q-item v-for="query in filteredQueries" :key="query.id">
+              <q-item-section>
+                <q-item-label>{{ query.name }}</q-item-label>
+                <q-item-label caption>
+                  Creada: {{ formatDate(query.created) }} |
+                  Usada: {{ formatDate(query.lastUsed) }} ({{ query.usageCount }} veces)
+                </q-item-label>
+                <q-item-label caption v-if="query.tags.length > 0">
+                  <q-chip v-for="tag in query.tags" :key="tag" size="sm">
+                    {{ tag }}
+                  </q-chip>
+                </q-item-label>
+              </q-item-section>
+
+              <q-item-section side>
+                <q-btn-group flat>
+                  <q-btn color="primary" icon="mdi-content-save-move" @click="loadQuery(query)" label="Cargar" />
+                  <q-btn color="negative" icon="mdi-delete" @click="confirmDeleteQuery(query)" />
+                </q-btn-group>
+              </q-item-section>
+            </q-item>
+          </q-list>
+        </q-card-section>
+
+        <q-card-actions align="right">
+          <q-btn flat label="Cancelar" color="primary" v-close-popup />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+
+    <!-- Diálogo para guardar consultas -->
+    <q-dialog v-model="showSaveDialog" persistent>
+      <q-card style="min-width: 50vw">
+        <q-card-section>
+          <div class="text-h6">Guardar consulta actual</div>
+        </q-card-section>
+
+        <q-card-section class="q-pt-none">
+          <q-input v-model="newQueryName" label="Nombre de la consulta"
+            :rules="[val => !!val || 'Nombre es requerido']" />
+
+          <q-select v-model="newQueryTags" label="Etiquetas" multiple use-chips input-debounce="0" use-input
+            @new-value="addTag" />
+          <!--
+          <q-card flat bordered class="q-mt-md">
+            <q-card-section>
+              <div class="text-subtitle2">Configuración actual</div>
+            </q-card-section>
+            <q-card-section>
+              <pre>{{ currentConfigPreview }}</pre>
+            </q-card-section>
+          </q-card>
+           -->
+        </q-card-section>
+
+        <q-card-actions align="right">
+          <q-btn flat label="Cancelar" color="primary" v-close-popup />
+          <q-btn flat label="Guardar" color="positive" @click="saveCurrentQuery" :disable="!newQueryName" />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+    <!-- GARGAR CONSULTAS  -->
 
     <!-- Tabla pivote resultante -->
     <div class="pivot-table-display q-pa-md">
@@ -105,7 +188,139 @@ import {
   mdiCodeJson,
   mdiFileDelimited
 } from '@mdi/js'
+//////////////
+import { usePivotStorage } from 'src/services/pivotStorage'
+import { format } from 'date-fns'
 const $q = useQuasar()
+const pivotStorage = usePivotStorage()
+// Estado para los diálogos
+const showLoadDialog = ref(false)
+const showSaveDialog = ref(false)
+const searchQuery = ref('')
+const newQueryName = ref('')
+const newQueryTags = ref([])
+
+// Obtener consultas filtradas
+const filteredQueries = computed(() => {
+  const queries = pivotStorage.getQueries()
+  if (!searchQuery.value) return queries
+
+  const search = searchQuery.value.toLowerCase()
+  return queries.filter(q =>
+    q.name.toLowerCase().includes(search) ||
+    q.tags.some(tag => tag.toLowerCase().includes(search))
+  )
+})
+
+// Vista previa de la configuración actual
+const currentConfigPreview = computed(() => {
+  return {
+    rows: config.value.rows,
+    columns: config.value.columns,
+    filters: config.value.filters,
+    values: config.value.values.map(field => ({
+      field,
+      aggregation: valueAggregators.value[field],
+      type: fieldTypes.value[field]
+    })),
+    activeFilters: activeFilters.value
+  }
+})
+
+// Verificar si se puede guardar la consulta
+const canSaveQuery = computed(() => {
+  return config.value.values.length > 0
+})
+
+// Formatear fecha para mostrar
+function formatDate(dateStr) {
+  return format(new Date(dateStr), 'dd/MM/yyyy HH:mm')
+}
+
+// Cargar una consulta guardada
+function loadQuery(query) {
+  config.value.rows = [...query.config.rows]
+  config.value.columns = [...query.config.columns]
+  config.value.filters = [...query.config.filters]
+  config.value.values = [...query.config.values.map(v => v.field)]
+
+  // Restaurar agregadores
+  query.config.values.forEach(v => {
+    valueAggregators.value[v.field] = v.aggregation
+  })
+
+  // Restaurar filtros activos si existen
+  if (query.config.activeFilters) {
+    activeFilters.value = { ...query.config.activeFilters }
+  }
+
+  pivotStorage.updateQueryUsage(query.id)
+  showLoadDialog.value = false
+  generatePivotData()
+
+  $q.notify({
+    message: `Consulta "${query.name}" cargada`,
+    color: 'positive',
+    icon: 'mdi-check-circle'
+  })
+}
+
+// Confirmar eliminación de consulta
+function confirmDeleteQuery(query) {
+  $q.dialog({
+    title: 'Confirmar eliminación',
+    message: `¿Estás seguro de eliminar la consulta "${query.name}"?`,
+    cancel: true,
+    persistent: true
+  }).onOk(() => {
+    pivotStorage.deleteQuery(query.id)
+    $q.notify({
+      message: `Consulta "${query.name}" eliminada`,
+      color: 'positive',
+      icon: 'mdi-check-circle'
+    })
+  })
+}
+
+// Guardar la consulta actual
+function saveCurrentQuery() {
+  const success = pivotStorage.saveQuery(
+    newQueryName.value,
+    currentConfigPreview.value,
+    newQueryTags.value
+  )
+
+  if (success) {
+    showSaveDialog.value = false
+    newQueryName.value = ''
+    newQueryTags.value = []
+
+    $q.notify({
+      message: 'Consulta guardada correctamente',
+      color: 'positive',
+      icon: 'mdi-check-circle'
+    })
+  }
+}
+
+// Añadir nueva etiqueta
+function addTag(val, done) {
+  if (val.length > 0) {
+    if (!newQueryTags.value.includes(val)) {
+      newQueryTags.value.push(val)
+    }
+    done(val, 'add')
+  } else {
+    done()
+  }
+}
+
+// Limpiar consultas antiguas al montar el componente
+onMounted(() => {
+  pivotStorage.cleanOldQueries()
+})
+
+//////////////
 
 const props = defineProps({
   data: {
