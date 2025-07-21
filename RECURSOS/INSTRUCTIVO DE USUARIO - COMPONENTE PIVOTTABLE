@@ -1,0 +1,251 @@
+# Componente PivotTable para Quasar 2 - README
+
+## INSTALACION
+
+1. Instalar dependencias:
+   npm install @quasar/extras @mdi/js exceljs
+
+2. Copiar archivos:
+   /src/components/PivotTable/
+   ├── PivotTable.vue
+   ├── usePivotLogic.js
+   └── assets/
+   ├── pivot-icons.svg
+   └── pivot-styles.css
+
+## CONFIGURACION REQUERIDA
+
+En quasar.config.js:
+framework: {
+iconSet: 'mdi-v6',
+extras: ['mdi-v6'],
+plugins: ['Notify']
+}
+
+## USO BASICO
+
+<template>
+  <PivotTable 
+    :data="datos"
+    :loading="cargando"
+    @export="handleExport"
+  />
+</template>
+
+<script setup>
+import PivotTable from 'components/PivotTable/PivotTable.vue'
+
+const datos = ref([]) // Array de objetos JSON
+const cargando = ref(false)
+</script>
+
+## AREAS FUNCIONALES
+
+► FILAS (Agrupación vertical)
+
+- Ej: Región > Ciudad
+- Soporte para múltiples niveles
+
+► COLUMNAS (Agrupación horizontal)
+
+- Ej: Año > Trimestre
+- Máx. recomendado: 3 niveles
+
+► FILTROS (Selección global)
+
+- Multiselección
+- Operadores: =, !=, >, <
+- Filtros combinados
+
+► VALORES (Métricas calculadas)
+
+- Funciones: suma, promedio, conteo
+- Formatos personalizables
+- Múltiples métricas simultáneas
+
+## EJEMPLOS PRACTICOS
+
+1. Ventas por región:
+   Rows: [pais, region]
+   Values: [ventas:sum, ganancia:avg]
+
+2. RRHH:
+   Rows: [departamento, cargo]
+   Filters: [activo:true]
+   Values: [salario:avg, empleados:count]
+
+## EXPORTACION
+
+Formatos disponibles:
+
+- Excel (.xlsx) con formato
+- JSON (estructura completa)
+- CSV (delimitado por comas)
+
+Métodos programáticos:
+pivotRef.value.exportTo('xlsx', {
+fileName: 'reporte',
+includeConfig: true
+})
+
+## TROUBLESHOOTING
+
+► Problema: Íconos no visibles
+Solución:
+
+1. Verificar instalación de @quasar/extras
+2. Revisar red para carga de fonts
+
+► Problema: Lentitud con >50k filas
+Solución:
+
+1. Activar modo servidor
+2. Usar paginación
+3. Limitar campos visibles
+
+► Problema: Exportación fallida
+Solución:
+
+1. Verificar permisos
+2. Confirmar formato de fechas
+3. Reducir tamaño de datos
+
+## DEPENDENCIAS
+
+@quasar/framework: ^2.6.0
+@quasar/extras: ^1.13.6
+exceljs: ^4.3.0
+@mdi/js: ^7.2.96
+
+INSTRUCTIVO DE USUARIO - COMPONENTE PIVOTTABLE
+
+=============================================
+
+1. # INICIO RÁPIDO
+
+1.1 Cargar datos:
+
+- Pegue sus datos en formato JSON en el componente padre
+- Ejemplo mínimo:
+  [
+  {"region": "Norte", "ventas": 1500},
+  {"region": "Sur", "ventas": 2200}
+  ]
+
+  1.2 Configuración inicial:
+
+- Arrastre campos a las 4 áreas principales:
+  - FILAS: Agrupación vertical (ej: región)
+  - COLUMNAS: Agrupación horizontal (ej: año)
+  - FILTROS: Filtros globales (ej: estado="activo")
+  - VALORES: Campos a calcular (ej: ventas→suma)
+
+============================================= 2. INTERFAZ VISUAL
+=============================================
+
+2.1 Barra de herramientas:
+
+- [ ] Icono Excel: Exportar a XLSX
+- { } Icono JSON: Exportar a JSON
+- CSV Icono: Exportar a CSV
+- ↻ Icono: Reiniciar configuración
+
+  2.2 Áreas de configuración:
+
+- Campos disponibles: Listado de columnas del JSON
+- 4 zonas de arrastre (filas, columnas, filtros, valores)
+
+  2.3 Tabla resultante:
+
+- Cabeceras dinámicas según configuración
+- Datos agrupados y calculados
+- Ordenamiento con clic en cabeceras
+
+============================================= 3. FUNCIONES PRINCIPALES
+=============================================
+
+3.1 Agregaciones disponibles:
+
+- Suma (sum)
+- Promedio (avg)
+- Conteo (count)
+- Mínimo (min)
+- Máximo (max)
+- Valores únicos (distinct)
+
+  3.2 Filtrado avanzado:
+
+- Multiselección en campos de filtro
+- Operadores: igual, contiene, entre
+- Filtros anidados con AND/OR
+
+  3.3 Exportación:
+
+- Excel: Conserva formatos y agrupaciones
+- JSON: Incluye metadatos y estructura
+- CSV: Delimitado por comas, UTF-8
+
+============================================= 4. EJEMPLO COMPLETO
+=============================================
+
+Paso 1: Cargar datos
+[
+{"año": 2023, "pais": "MX", "producto": "Laptop", "ventas": 50},
+{"año": 2023, "pais": "BR", "producto": "Tablet", "ventas": 30}
+]
+
+Paso 2: Configurar
+
+- FILAS: pais
+- COLUMNAS: año
+- VALORES: ventas→suma
+
+Paso 3: Resultado
+| pais | 2023 |
+|------|------|
+| MX | 50 |
+| BR | 30 |
+
+============================================= 5. TIPS AVANZADOS
+=============================================
+
+5.1 Atajos de teclado:
+
+- Ctrl+E: Exportar a Excel
+- Ctrl+R: Resetear vista
+- Ctrl+F: Enfocar filtros
+
+  5.2 Uso profesional:
+
+- Guarde configuraciones frecuentes
+- Combine múltiples métricas
+- Use nombres descriptivos en campos
+
+  5.3 Rendimiento:
+
+- Para >50k filas, active "Modo servidor"
+- Prefiera filtros tempranos
+- Limite campos visibles
+
+============================================= 6. SOLUCIÓN DE PROBLEMAS
+=============================================
+
+6.1 Datos no visibles:
+
+- Verifique nombres de campos
+- Revise filtros aplicados
+- Confirme formato de datos
+
+  6.2 Cálculos incorrectos:
+
+- Verifique tipos de datos
+- Revise funciones de agregación
+- Confirme valores nulos
+
+  6.3 Exportación fallida:
+
+- Verifique permisos
+- Confirme espacio en disco
+- Revise formato de fechas
+
+=============================================
