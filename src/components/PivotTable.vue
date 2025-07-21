@@ -25,7 +25,8 @@
               <q-select v-model="config.filters" :options="availableFields" label="Filtros" multiple use-chips
                 emit-value map-options />
             </div>
-            <div class="col-md-3">
+
+            <!-- <div class="col-md-3">
               <q-select v-model="config.values" :options="availableFields" label="Valores" multiple use-chips emit-value
                 map-options>
                 <template v-slot:option="scope">
@@ -39,6 +40,34 @@
                         @update:model-value="generatePivotData" />
                     </q-item-section>
                   </q-item>
+                </template>
+</q-select>
+</div> -->
+            <div class="col-md-3">
+              <q-select v-model="config.values" :options="availableFields" label="Valores" multiple use-chips emit-value
+                map-options>
+                <template v-slot:option="scope">
+                  <q-item v-bind="scope.itemProps">
+                    <q-item-section>
+                      <q-item-label>{{ scope.opt.label }}</q-item-label>
+                    </q-item-section>
+                    <q-item-section side>
+                      <q-select v-model="valueAggregators[scope.opt.value]"
+                        :options="getAggregatorsForField(scope.opt.value)" option-label="label" option-value="value"
+                        emit-value map-options dense borderless @update:model-value="generatePivotData" />
+                    </q-item-section>
+                  </q-item>
+                </template>
+
+                <template v-slot:selected-item="scope">
+                  <q-chip removable @remove="removeValue(scope.opt.value)" :tabindex="scope.tabindex" color="primary">
+                    <span class="value-chip">
+                      {{ scope.opt.label }}
+                      <q-badge color="secondary" class="q-ml-sm">
+                        {{ getAggregatorLabel(scope.opt.value, valueAggregators[scope.opt.value]) }}
+                      </q-badge>
+                    </span>
+                  </q-chip>
                 </template>
               </q-select>
             </div>
@@ -361,7 +390,11 @@ const aggregatorOptions = {
     { label: 'Valores únicos', value: 'distinct' }
   ]
 }
-
+function getAggregatorLabel(field, aggregatorValue) {
+  const aggregators = getAggregatorsForField(field)
+  const found = aggregators.find(agg => agg.value === aggregatorValue)
+  return found ? found.label : aggregatorValue
+}
 const valueAggregators = ref({})
 
 // Estado de exportación
@@ -791,5 +824,15 @@ defineExpose({ generatePivotData })
 
 .q-btn-group {
   margin-top: 10px;
+}
+
+.q-select .value-chip {
+  display: flex;
+  align-items: center;
+}
+
+.value-chip {
+  display: flex;
+  align-items: center;
 }
 </style>
